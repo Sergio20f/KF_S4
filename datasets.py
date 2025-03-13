@@ -66,8 +66,8 @@ class SinusoidalDataset(Dataset):
         
     
         # Add more noise to the signal
-        # signal += 0.5 * np.random.randn(self.seq_length)
-        signal += 0.5 * t_dist.rvs(2.01, size=self.seq_length)
+        signal += 0.5 * np.random.randn(self.seq_length)
+        # signal += 0.5 * t_dist.rvs(2.01, size=self.seq_length)
 
         label = frequencies.index(freq)
         sample = {'input': torch.tensor(signal, dtype=torch.float).view(-1, self.num_features), 'label': label}
