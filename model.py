@@ -62,9 +62,10 @@ class ReservoirLinearRNN_Block(nn.Module):
         self.mlp = MLP(hidden_size, mlp_hidden_dim, hidden_size, mlp_num_layers)
         
     def forward(self, x, y_KF=None, R=None, Sigma_pred=None):
-        if not y_KF:
-            # (batch, seq_len, input_size)
-            batch, seq_len, _ = x.shape
+        # (batch, seq_len, input_size)
+        batch, seq_len, _ = x.shape
+
+        if y_KF is None:
             h = None
             outputs = []
 
@@ -94,21 +95,21 @@ class ReservoirLinearRNN_Block(nn.Module):
                 if h_pred is None:
                     h_pred = Bu_t
                 else:
-                    h_pred = torch.matmul(h, self.A) + Bu_t
+                    h_pred = torch.matmul(h_pred, self.A) + Bu_t
 
                 Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2)
 
                 # Innovation
                 err = y - self.C @ h_pred
-                S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + self.R
+                S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + R
 
                 # Kalman Gain
                 K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2) # TODO: Is Sigma_pred.T or no?
 
                 # Update Step
-                h = h_pred + K @ err
+                h_pred = h_pred + K @ err
                 Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
-                outputs.append(h.unsqueeze(1))
+                outputs.append(h_pred.unsqueeze(1))
             
         # (batch, seq_len, hidden_size)
         H_seq = torch.cat(outputs, dim=1)
