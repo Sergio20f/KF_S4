@@ -52,6 +52,8 @@ class ReservoirLinearRNN_Block(nn.Module):
         # Create a fixed reservoir matrix and register it as a buffer so it is not updated during training.
         A = init_reservoir_matrix(hidden_size)
         self.register_buffer('A', A)
+
+        self.C = nn.Identity() # C = I; for now
     
         self.residual_proj = nn.Linear(input_size, hidden_size) if input_size != hidden_size else nn.Identity()
         self.layer_norm = nn.LayerNorm(hidden_size)
@@ -59,7 +61,7 @@ class ReservoirLinearRNN_Block(nn.Module):
         # Final MLP
         self.mlp = MLP(hidden_size, mlp_hidden_dim, hidden_size, mlp_num_layers)
         
-    def forward(self, x, y_KF=None):
+    def forward(self, x, y_KF=None, R=None, Sigma_pred=None):
         if not y_KF:
             # (batch, seq_len, input_size)
             batch, seq_len, _ = x.shape
@@ -79,10 +81,7 @@ class ReservoirLinearRNN_Block(nn.Module):
                 outputs.append(h.unsqueeze(1))
 
         else:
-            R = 1.2 * torch.eye(self.hidden_size)  # For normal KF, R will be a diagonal matrix times some scalar. Future -> R_t.
-            Sigma_pred = torch.eye(self.hidden_size)  # TEMP: Initial Sigma
             y = y_KF
-            
             h_pred = None
             outputs = []
 
