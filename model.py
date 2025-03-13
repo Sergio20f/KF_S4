@@ -38,10 +38,13 @@ class ReservoirLinearRNN_Block(nn.Module):
         1) Linear encoder from input dim L to some intermediate dim M
         2) Multiply by B to map to hidden dim H
         3) Reservoir update with a fixed or partially fixed matrix A (diag(lambda) or random)
-        4) Residual / skip + layer norm
-        5) MLP or other nonlinear transform
+        4) Residual + layer norm
+        5) MLP
         """
         super().__init__()
+
+        # Params
+        self.hidden_size = hidden_size
 
         self.encoder = nn.Linear(input_size, encode_dim) if input_size != encode_dim else nn.Identity() # First linear layer
         self.B = nn.Linear(encode_dim, hidden_size, bias=False)
@@ -56,24 +59,58 @@ class ReservoirLinearRNN_Block(nn.Module):
         # Final MLP
         self.mlp = MLP(hidden_size, mlp_hidden_dim, hidden_size, mlp_num_layers)
         
-    def forward(self, x):
-        # (batch, seq_len, input_size)
-        batch, seq_len, _ = x.shape
-        h = None
-        outputs = []
+    def forward(self, x, y_KF=None):
+        if not y_KF:
+            # (batch, seq_len, input_size)
+            batch, seq_len, _ = x.shape
+            h = None
+            outputs = []
 
-        for t in range(seq_len):
-            xt = x[:, t, :]  # (batch, input_size)
-            u_t = self.encoder(xt) # (batch, M)
-            Bu_t = self.B(u_t) # (batch, H)
+            for t in range(seq_len):
+                xt = x[:, t, :]  # (batch, input_size)
+                u_t = self.encoder(xt) # (batch, M)
+                Bu_t = self.B(u_t) # (batch, H)
 
-            if h is None:
-                h = Bu_t
-            else:
-                h = torch.matmul(h, self.A) + Bu_t
+                if h is None:
+                    h = Bu_t
+                else:
+                    h = torch.matmul(h, self.A) + Bu_t
 
-            outputs.append(h.unsqueeze(1))
-        
+                outputs.append(h.unsqueeze(1))
+
+        else:
+            R = 1.2 * torch.eye(self.hidden_size)  # For normal KF, R will be a diagonal matrix times some scalar. Future -> R_t.
+            Sigma_pred = torch.eye(self.hidden_size)  # TEMP: Initial Sigma
+            y = y_KF
+            
+            h_pred = None
+            outputs = []
+
+            for t in range(seq_len):
+                xt = x[:, t, :]  # (batch, input_size)
+                u_t = self.encoder(xt)
+                Bu_t = self.B(u_t)
+
+                # Predict Step
+                if h_pred is None:
+                    h_pred = Bu_t
+                else:
+                    h_pred = torch.matmul(h, self.A) + Bu_t
+
+                Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2)
+
+                # Innovation
+                err = y - self.C @ h_pred
+                S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + self.R
+
+                # Kalman Gain
+                K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2) # TODO: Is Sigma_pred.T or no?
+
+                # Update Step
+                h = h_pred + K @ err
+                Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
+                outputs.append(h.unsqueeze(1))
+            
         # (batch, seq_len, hidden_size)
         H_seq = torch.cat(outputs, dim=1)
         residual = self.residual_proj(x)
@@ -103,11 +140,13 @@ class ReservoirLinearRNN(nn.Module):
         self.final_linear = nn.Linear(hidden_size, num_classes)
     
     def forward(self, x):
+        y_KF = [] # List of y's for each block (each element of the list is a tensor of shape (batch, seq_len, hidden_size))
         for block in self.blocks:
             x = block(x)
+            y_KF.append(x)
         last_output = x[:, -1, :]
         logits = self.final_linear(last_output)
-        return logits
+        return logits, y_KF
 
 ###################################################### BASELINES #################################################################
 

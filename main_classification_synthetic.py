@@ -9,7 +9,6 @@ import torch
 import matplotlib.pyplot as plt
 from datasets import *
 import time
-from torchsummary import summary
 from helpers import calculate_accuracy
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -136,7 +135,9 @@ def main(hyperp_tuning=False):
         for idx, batch in enumerate(data_loader):
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
             
-            outputs = model(inputs).to(device)
+            outputs = model(inputs).to(device) # 2 outputs if reservoir-linear-RNN
+            if args.model == 'reservoir-linear-RNN':
+                outputs, _ = outputs
             loss = criterion(outputs, labels)
             epoch_loss += loss.item()  # Add the loss of the current batch to the epoch loss
 
@@ -159,6 +160,8 @@ def main(hyperp_tuning=False):
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Training time: {execution_time:.2f} seconds")
+
+# TODO: After training, we will need to carry out a forward pass with the test data to get the y_KFs for the KF-based model
 
 if __name__ == '__main__':
     main(hyperp_tuning=args.hyperp_tuning)
