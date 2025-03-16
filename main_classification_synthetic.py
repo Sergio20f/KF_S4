@@ -9,7 +9,7 @@ import torch
 import matplotlib.pyplot as plt
 from datasets import *
 import time
-from helpers import calculate_accuracy
+from helpers import calculate_accuracy, calculate_accuracy_KF
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print (device)
@@ -17,13 +17,13 @@ torch.manual_seed(0)
 
 parser = argparse.ArgumentParser(description='PyTorch Transformer on Time series forecasting')
 
-parser.add_argument('--batch_size', default=10, type=int,
+parser.add_argument('--batch_size', default=1, type=int, # Changed from 10
                     help='mini-batch size (default: 64)')
 parser.add_argument('--eval_batch_size', default=-1, type=int,
                     help='eval_batch_size default is equal to training batch_size')
 parser.add_argument('--nlayers', default=4, type=int,
                     help='number of layers')
-parser.add_argument('--epoch', default=1000, type=int,
+parser.add_argument('--epoch', default=3, type=int, # Changed
                     help='epoch (default: 20)')
 parser.add_argument('--lr',default=0.001, type=float,
                     help='initial learning rate')
@@ -42,7 +42,7 @@ parser.add_argument("--model", default='lstm',type=str,
 parser.add_argument('--hidden_dim', default=128, type=int,
                     help='number of layers')
 # Added
-parser.add_argument('--encode_dim', default=2, type=int, # 2 to match input_size
+parser.add_argument('--encode_dim', default=128, type=int, # 2 to match input_size
                     help='encode_dim')
 parser.add_argument('--mlp_hidden_dim', default=64, type=int,
                     help='mlp_hidden_dim')
@@ -69,7 +69,7 @@ def main(hyperp_tuning=False):
         seq_length_orig = seq_length
 
     
-        num_features = 2
+        num_features = 2 # TODO: Does this make the seq_length = seq_length/num_features?
 
         freq_min=10 
         freq_max=500 
@@ -135,9 +135,10 @@ def main(hyperp_tuning=False):
         for idx, batch in enumerate(data_loader):
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
             
-            outputs = model(inputs).to(device) # 2 outputs if reservoir-linear-RNN
+            outputs = model(inputs) # 2 outputs if reservoir-linear-RNN
             if args.model == 'reservoir-linear-RNN':
-                outputs, _ = outputs
+                outputs = outputs[0]
+            outputs = outputs.to(device)
             loss = criterion(outputs, labels)
             epoch_loss += loss.item()  # Add the loss of the current batch to the epoch loss
 
@@ -147,8 +148,8 @@ def main(hyperp_tuning=False):
             loss.backward()
             optimizer.step()
 
-        val_accuracy, _ = calculate_accuracy(args, model, val_loader, num_classes)
-        test_accuracy, _ = calculate_accuracy(args, model, test_loader, num_classes)
+        val_accuracy, _ = calculate_accuracy(model, val_loader, num_classes)
+        test_accuracy, _ = calculate_accuracy(model, test_loader, num_classes)
 
         model.train()
 
@@ -161,7 +162,17 @@ def main(hyperp_tuning=False):
     execution_time = end_time - start_time
     print(f"Training time: {execution_time:.2f} seconds")
 
-# TODO: After training, we will need to carry out a forward pass with the test data to get the y_KFs for the KF-based model
+    if (args.model == 'reservoir-linear-RNN'):
+        # TODO: After training, we will need to carry out a forward pass with the test data to get the y_KFs for the KF-based model
+        model.eval()
+        print("Forward pass on test data to collect y_KFs")
+        test_accuracy, y_KF, _ = calculate_accuracy(model, test_loader, num_classes, test=True)
+        print(f'Test Accuracy: {test_accuracy * 100:.2f}%')
+
+        print("Calculating accuracy using KF-based model")
+        test_accuracy_KF, _ = calculate_accuracy_KF(args, model, test_loader, num_classes, y_KF, device)
+        print(f'Test Accuracy KF: {test_accuracy_KF * 100:.2f}%')
+
 
 if __name__ == '__main__':
     main(hyperp_tuning=args.hyperp_tuning)
