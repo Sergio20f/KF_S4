@@ -4,6 +4,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def calculate_accuracy(model, data_loader, num_classes, test=False):
+    """
+    TODO: The way we collect y_KF does not work for multiple batches (it overwrites the previous batch).
+    """
     model.eval()
     correct = 0
     total = 0
@@ -15,10 +18,10 @@ def calculate_accuracy(model, data_loader, num_classes, test=False):
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
 
             if test:
-                outputs, y_KF = model(inputs)
+                outputs, y_KF = model(inputs, y_KF=None)
                 outputs = outputs.to(device)
             else:
-                outputs, _ = model(inputs)
+                outputs, _ = model(inputs, y_KF=None)
                 outputs = outputs.to(device)
 
             predicted_labels = torch.argmax(outputs, dim=1)
@@ -38,20 +41,20 @@ def calculate_accuracy(model, data_loader, num_classes, test=False):
     else:
         return accuracy, error_distribution
 
-def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, device):
+def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, device):
     model.eval()
     correct = 0
     total = 0
     correct = 0
     error_distribution = {}
 
-    alpha = 1e-2
+    alpha = 1e-6
     Sigma_pred = alpha * torch.eye(args.hidden_dim)
+    R = R_est * torch.eye(args.hidden_dim).to(device) # TODO: Change for dense matrix eventually
 
-    y_KF = y_KF[0] # TODO: This only works when we have one reservoir block. Need to change this for multiple blocks.
+    y_KF = y_KF[0] # TODO: This only works when we have one reservoir block. Need to change this for multiple blocks and batches
     with torch.no_grad():
         for idx, batch in enumerate(data_loader):
-            R = torch.var(y_KF).to(device) * torch.eye(args.hidden_dim).to(device) # TODO: Change for dense matrix eventually
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
 
             outputs, _ = model(inputs.to(device), y_KF=y_KF.to(device), R=R.to(device), Sigma_pred=Sigma_pred.to(device))

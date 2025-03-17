@@ -6,7 +6,6 @@ https://arxiv.org/pdf/1704.04110.pdf
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import torch
-from sktime.datasets import load_from_arff_to_dataframe
 from torch import Tensor
 import os, os.path
 import urllib.response
@@ -14,8 +13,6 @@ import zipfile
 from sklearn.preprocessing import LabelEncoder
 from sklearn import model_selection
 from torch.utils.data import TensorDataset
-import pandas as pd
-from tqdm import tqdm
 import torchvision
 import torchvision.transforms as transforms
 from torchaudio.datasets import SPEECHCOMMANDS
@@ -23,7 +20,6 @@ import os
 import urllib.request
 import tarfile
 import shutil
-import librosa
 import torch.utils.data as data
 from scipy import integrate
 import random
@@ -35,7 +31,13 @@ from scipy.stats import t as t_dist
 class SinusoidalDataset(Dataset):
     def __init__(self, num_samples, seq_length=100, num_features=1, 
                  freq_min=10, freq_max=500, num_classes=100, noise=0,
-                 add_outlier=0, outlier_factor=3):
+                 add_outlier=0, outlier_factor=3, seed=42):
+        
+        if seed is not None:
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+            random.seed(seed)
+
         self.num_samples = num_samples
         self.seq_length = seq_length
         self.num_features = num_features

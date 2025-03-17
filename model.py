@@ -52,8 +52,6 @@ class ReservoirLinearRNN_Block(nn.Module):
         # Create a fixed reservoir matrix and register it as a buffer so it is not updated during training.
         A = init_reservoir_matrix(hidden_size)
         self.register_buffer('A', A)
-
-        self.C = None # TODO: This only works if hidden state dim = y dim)
     
         self.residual_proj = nn.Linear(input_size, hidden_size) if input_size != hidden_size else nn.Identity()
         self.layer_norm = nn.LayerNorm(hidden_size)
@@ -81,23 +79,16 @@ class ReservoirLinearRNN_Block(nn.Module):
 
                 outputs.append(h.unsqueeze(1))
 
-            # (batch, seq_len, hidden_size)
-            H_seq_pre = torch.cat(outputs, dim=1)
-            residual = self.residual_proj(x)
-            H_seq = self.layer_norm(H_seq_pre + residual) # (1, 50, 128) + (128) i.e. C = I
-
-            h_last = H_seq[:, -1, :] # (batch, hidden_size)
-            out = self.mlp(h_last)
-            return out, H_seq_pre
-
         else:
-            y = y_KF
+            y = y_KF # (batch, seq_len, hidden_size)
             h_pred = None
             outputs = []
+            Sigma_pred = Sigma_pred.expand(1, -1, -1)
+            R = R.expand(1, -1, -1)
 
             for t in range(seq_len):
                 xt = x[:, t, :]  # (batch, input_size)
-                u_t = self.encoder(xt).squeeze() # (batch, M)
+                u_t = self.encoder(xt) # (batch, M)
                 Bu_t = self.B(u_t)
 
                 # Predict Step
@@ -106,32 +97,35 @@ class ReservoirLinearRNN_Block(nn.Module):
                 else:
                     h_pred = torch.matmul(h_pred, self.A) + Bu_t # We want -> (hidden_size)
 
-                Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2)
+                # Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2)
 
-                # Innovation
-                # err = y - self.C @ h_pred
-                # S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + R # Model R with torch.var(y_KF) * torch.eye(hidden_size)
-                err = y[0, t, :] - h_pred # TEMP FIX: Assuming only one batch
-                # wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c) # WoLF
-                S = Sigma_pred + R #/ wt
+                # # Innovation
+                # # err = y - self.C @ h_pred
+                # # S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + R # Model R with torch.var(y_KF) * torch.eye(hidden_size)
+                # err = y[:, t, :] - h_pred # TEMP FIX: Assuming only one batch
+                # # wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c) # WoLF
+                # # S = Sigma_pred + R / wt
+                # S = Sigma_pred
 
-                # Kalman Gain
-                # K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2)
-                K = torch.linalg.solve(S, Sigma_pred).transpose(-1, -2) # hidden_size, hidden_size
+                # # Kalman Gain
+                # # K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2)
+                # # K = torch.linalg.solve(S, Sigma_pred).transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size
+                # K = torch.eye(self.hidden_size, device=x.device).expand(1, -1, -1)
 
-                # Update Step
-                h_pred = h_pred + K @ err # (hidden_size)
-                Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
-                outputs.append(h_pred)#.unsqueeze(1))
+                # # Update Step
+                # h_pred = h_pred + torch.matmul(K, err.unsqueeze(-1)).squeeze(-1)
+                # Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
+                outputs.append(h_pred.unsqueeze(1))
             
-            # (batch, seq_len, hidden_size)
-            H_seq_pre = torch.stack(outputs, dim=0) # (seq_length, hidden_size)
-            residual = self.residual_proj(x) # (batch, seq_length, hidden_size)
-            H_seq = self.layer_norm(H_seq_pre + residual) # (1, 50, 128) + (128) i.e. C = I
+        # (batch, seq_len, hidden_size)
+        # H_seq_pre = torch.stack(outputs, dim=0) # (seq_length, hidden_size)
+        H_seq_pre = torch.cat(outputs, dim=1)
+        residual = self.residual_proj(x) # (batch, seq_length, hidden_size)
+        H_seq = self.layer_norm(H_seq_pre + residual) # (1, 50, 128) + (128) i.e. C = I
 
-            h_last = H_seq[:, -1, :] # (batch, hidden_size)
-            out = self.mlp(h_last)
-            return out, H_seq_pre
+        h_last = H_seq[:, -1, :] # (batch, hidden_size)
+        out = self.mlp(h_last)
+        return out, H_seq_pre
 
 class ReservoirLinearRNN(nn.Module):
     def __init__(self, input_size, encode_dim, hidden_size, mlp_hidden_dim, mlp_num_layers, num_layers, num_classes):

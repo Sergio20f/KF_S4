@@ -14,6 +14,8 @@ from helpers import calculate_accuracy, calculate_accuracy_KF
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print (device)
 torch.manual_seed(0)
+np.random.seed(0)
+random.seed(0)
 
 parser = argparse.ArgumentParser(description='PyTorch Transformer on Time series forecasting')
 
@@ -39,10 +41,10 @@ parser.add_argument('--hyperp_tuning', default=False, action='store_true',
                     help='whether to perform hyperparameter tuning')
 parser.add_argument("--model", default='lstm',type=str,
                     help="Model you want to train. [linear-RNN, LSTM]")
-parser.add_argument('--hidden_dim', default=128, type=int,
+parser.add_argument('--hidden_dim', default=128, type=int, 
                     help='number of layers')
 # Added
-parser.add_argument('--encode_dim', default=128, type=int, # 2 to match input_size
+parser.add_argument('--encode_dim', default=128, type=int, # 2 to match input_size # 128
                     help='encode_dim')
 parser.add_argument('--mlp_hidden_dim', default=64, type=int,
                     help='mlp_hidden_dim')
@@ -68,7 +70,6 @@ def main(hyperp_tuning=False):
         seq_length = 100
         seq_length_orig = seq_length
 
-    
         num_features = 2 # TODO: Does this make the seq_length = seq_length/num_features?
 
         freq_min=10 
@@ -77,10 +78,10 @@ def main(hyperp_tuning=False):
     
         dataset = SinusoidalDataset(num_samples, seq_length, num_features, freq_min, freq_max, num_classes)
         data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-        val_dataset = SinusoidalDataset(num_samples, seq_length, num_features, freq_min, freq_max, num_classes)  # 100 test samples
+        val_dataset = SinusoidalDataset(int(num_samples/4), seq_length, num_features, freq_min, freq_max, num_classes)
         val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
-        # Create test dataset and loader
-        test_dataset = SinusoidalDataset(int(num_samples/2), seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=5, outlier_factor=5)  # 100 test samples
+        # test_dataset = SinusoidalDataset(int(num_samples/2), seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=5, outlier_factor=5)
+        test_dataset = SinusoidalDataset(100, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=10, outlier_factor=5)
         test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False)
     
     elif (args.dataset == 'sinusoidal_long'):
@@ -125,7 +126,6 @@ def main(hyperp_tuning=False):
     train_loss_list = []
     val_accuracy_list = []
     test_accuracy_list = []
-    global_step = 0
 
     start_time = time.time()
 
@@ -142,7 +142,6 @@ def main(hyperp_tuning=False):
             loss = criterion(outputs, labels)
             epoch_loss += loss.item()  # Add the loss of the current batch to the epoch loss
 
-            global_step += 1
             train_loss_list.append(loss.item())
             optimizer.zero_grad()
             loss.backward()
@@ -165,14 +164,22 @@ def main(hyperp_tuning=False):
     if (args.model == 'reservoir-linear-RNN'):
         # TODO: After training, we will need to carry out a forward pass with the test data to get the y_KFs for the KF-based model
         model.eval()
+        # Let us estimate the diag values of R from a validation dataset
+        _, R_est, _ = calculate_accuracy(model, val_loader, num_classes, test=True)
+        R_est = torch.var(R_est[0])
+        print(f'R_est: {R_est.cpu().numpy():.2f}')
+
         print("Forward pass on test data to collect y_KFs")
         test_accuracy, y_KF, _ = calculate_accuracy(model, test_loader, num_classes, test=True)
         print(f'Test Accuracy: {test_accuracy * 100:.2f}%')
 
-        print("Calculating accuracy using KF-based model")
-        test_accuracy_KF, _ = calculate_accuracy_KF(args, model, test_loader, num_classes, y_KF, device)
-        print(f'Test Accuracy KF: {test_accuracy_KF * 100:.2f}%')
-
+        print("Calculating accuracy using KF-based model multiple times")
+        test_accuracy_list = []
+        for i in range(10):
+            test_accuracy_KF, _ = calculate_accuracy_KF(args, model, test_loader, num_classes, y_KF, R_est, device)
+            print(f'Test Accuracy KF: {test_accuracy_KF * 100:.2f}%')
+            test_accuracy_list.append(test_accuracy_KF*100)
+        print(f'Average Test Accuracy KF: {np.mean(test_accuracy_list):.2f}%')
 
 if __name__ == '__main__':
-    main(hyperp_tuning=args.hyperp_tuning)
+    main()
