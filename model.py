@@ -61,7 +61,7 @@ class ReservoirLinearRNN_Block(nn.Module):
         # Final MLP
         self.mlp = MLP(hidden_size, mlp_hidden_dim, hidden_size, mlp_num_layers)
         
-    def forward(self, x, y_KF=None, R=None, Sigma_pred=None):
+    def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=3):
         # (batch, seq_len, input_size)
         batch, seq_len, _ = x.shape
 
@@ -112,7 +112,8 @@ class ReservoirLinearRNN_Block(nn.Module):
                 # err = y - self.C @ h_pred
                 # S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + R # Model R with torch.var(y_KF) * torch.eye(hidden_size)
                 err = y[0, t, :] - h_pred # TEMP FIX: Assuming only one batch
-                S = Sigma_pred + R
+                # wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c) # WoLF
+                S = Sigma_pred + R #/ wt
 
                 # Kalman Gain
                 # K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2)

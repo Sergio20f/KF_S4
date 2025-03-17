@@ -23,8 +23,8 @@ parser.add_argument('--eval_batch_size', default=-1, type=int,
                     help='eval_batch_size default is equal to training batch_size')
 parser.add_argument('--nlayers', default=4, type=int,
                     help='number of layers')
-parser.add_argument('--epoch', default=3, type=int, # Changed
-                    help='epoch (default: 20)')
+parser.add_argument('--epoch', default=1, type=int, # Changed
+                    help='epoch (default: 1)')
 parser.add_argument('--lr',default=0.001, type=float,
                     help='initial learning rate')
 parser.add_argument('--weight_decay',default=0, type=float,
@@ -80,7 +80,7 @@ def main(hyperp_tuning=False):
         val_dataset = SinusoidalDataset(num_samples, seq_length, num_features, freq_min, freq_max, num_classes)  # 100 test samples
         val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
         # Create test dataset and loader
-        test_dataset = SinusoidalDataset(num_samples, seq_length, num_features, freq_min, freq_max, num_classes)  # 100 test samples
+        test_dataset = SinusoidalDataset(int(num_samples/2), seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=5, outlier_factor=5)  # 100 test samples
         test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False)
     
     elif (args.dataset == 'sinusoidal_long'):
