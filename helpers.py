@@ -58,6 +58,8 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, de
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
 
             outputs, _ = model(inputs.to(device), y_KF=y_KF.to(device), R=R.to(device), Sigma_pred=Sigma_pred.to(device))
+            print("output shape", outputs.shape)
+            print("output", outputs)
 
             predicted_labels = torch.argmax(outputs, dim=1)
             total += labels.size(0)

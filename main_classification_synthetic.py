@@ -81,7 +81,7 @@ def main(hyperp_tuning=False):
         val_dataset = SinusoidalDataset(int(num_samples/4), seq_length, num_features, freq_min, freq_max, num_classes)
         val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
         # test_dataset = SinusoidalDataset(int(num_samples/2), seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=5, outlier_factor=5)
-        test_dataset = SinusoidalDataset(100, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=10, outlier_factor=5)
+        test_dataset = SinusoidalDataset(1, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=10, outlier_factor=5)
         test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False)
     
     elif (args.dataset == 'sinusoidal_long'):
@@ -169,17 +169,16 @@ def main(hyperp_tuning=False):
         R_est = torch.var(R_est[0])
         print(f'R_est: {R_est.cpu().numpy():.2f}')
 
-        print("Forward pass on test data to collect y_KFs")
-        test_accuracy, y_KF, _ = calculate_accuracy(model, test_loader, num_classes, test=True)
-        print(f'Test Accuracy: {test_accuracy * 100:.2f}%')
+        print("Forward pass on test data to collect y_KFs multiple times")
+        for i in range(1):
+            test_accuracy, y_KF, _ = calculate_accuracy(model, test_loader, num_classes, test=True)
+            print(f'Test Accuracy: {test_accuracy * 100:.2f}%')
 
         print("Calculating accuracy using KF-based model multiple times")
-        test_accuracy_list = []
-        for i in range(10):
+        for i in range(3):
             test_accuracy_KF, _ = calculate_accuracy_KF(args, model, test_loader, num_classes, y_KF, R_est, device)
             print(f'Test Accuracy KF: {test_accuracy_KF * 100:.2f}%')
             test_accuracy_list.append(test_accuracy_KF*100)
-        print(f'Average Test Accuracy KF: {np.mean(test_accuracy_list):.2f}%')
 
 if __name__ == '__main__':
     main()
