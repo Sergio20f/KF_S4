@@ -62,9 +62,6 @@ class ReservoirLinearRNN_Block(nn.Module):
     def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=3):
         # (batch, seq_len, input_size)
         batch, seq_len, _ = x.shape
-        # if y_KF is not None:
-            # print("x", x)
-            # print("x shape", x.shape)
 
         if y_KF is None:
             h = None
@@ -123,8 +120,6 @@ class ReservoirLinearRNN_Block(nn.Module):
         # (batch, seq_len, hidden_size)
         # H_seq_pre = torch.stack(outputs, dim=0) # (seq_length, hidden_size)
         H_seq_pre = torch.cat(outputs, dim=1)
-        # if y_KF is not None:
-            # print("H_seq_pre", H_seq_pre)
         residual = self.residual_proj(x) # (batch, seq_length, hidden_size)
         H_seq = self.layer_norm(H_seq_pre + residual) # (1, 50, 128) + (128) i.e. C = I
 
@@ -158,7 +153,7 @@ class ReservoirLinearRNN(nn.Module):
             y_KF_list.append(y_KF_val)
         last_output = x#[:, -1, :]
         logits = self.final_linear(last_output)
-        # return logits, y_KF_list
+        return logits, y_KF_list
 
 ###################################################### BASELINES #################################################################
 

@@ -68,7 +68,6 @@ def main(hyperp_tuning=False):
         # Hyperparameters for the dataset and dataloader
         num_samples = 1000
         seq_length = 100
-        seq_length_orig = seq_length
 
         num_features = 2 # TODO: Does this make the seq_length = seq_length/num_features?
 
@@ -135,9 +134,7 @@ def main(hyperp_tuning=False):
         for idx, batch in enumerate(data_loader):
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
             
-            outputs = model(inputs) # 2 outputs if reservoir-linear-RNN
-            if args.model == 'reservoir-linear-RNN':
-                outputs = outputs[0]
+            outputs, _ = model(inputs) # 2 outputs if reservoir-linear-RNN
             outputs = outputs.to(device)
             loss = criterion(outputs, labels)
             epoch_loss += loss.item()  # Add the loss of the current batch to the epoch loss
