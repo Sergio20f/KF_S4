@@ -49,9 +49,12 @@ class SinusoidalDataset(Dataset):
         self.outlier_factor = outlier_factor
 
     def __len__(self):
+        # TODO-FIX: len is not being used(?)
         return self.num_samples
 
     def __getitem__(self, idx):
+        np.random.seed(314) # TODO: remove
+        idx = 0 # TODO: remove
         # Generate frequencies for each class
         frequencies = [i for i in range(self.freq_min, self.freq_max + 1, 
                                           (self.freq_max - self.freq_min) // self.num_classes)]

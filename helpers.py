@@ -3,7 +3,7 @@ import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def calculate_accuracy(model, data_loader, num_classes, test=False):
+def calculate_accuracy(model, data_loader, num_classes, test=False, verbose=False):
     """
     TODO: The way we collect y_KF does not work for multiple batches (it overwrites the previous batch).
     """
@@ -58,8 +58,6 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, de
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
 
             outputs, _ = model(inputs.to(device), y_KF=y_KF.to(device), R=R.to(device), Sigma_pred=Sigma_pred.to(device))
-            print("output shape", outputs.shape)
-            print("output", outputs)
 
             predicted_labels = torch.argmax(outputs, dim=1)
             total += labels.size(0)
@@ -75,6 +73,7 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, de
     return accuracy, error_distribution
 
 def init_reservoir_matrix(hidden_size):
+    print("Initializing reservoir matrix")
     W = torch.randn(hidden_size, hidden_size)
     Q, R = torch.linalg.qr(W)
     if torch.det(Q) < 0:

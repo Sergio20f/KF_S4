@@ -167,15 +167,15 @@ def main(hyperp_tuning=False):
         # Let us estimate the diag values of R from a validation dataset
         _, R_est, _ = calculate_accuracy(model, val_loader, num_classes, test=True)
         R_est = torch.var(R_est[0])
-        print(f'R_est: {R_est.cpu().numpy():.2f}')
+        # print(f'R_est: {R_est.cpu().numpy():.2f}')
 
         print("Forward pass on test data to collect y_KFs multiple times")
-        for i in range(1):
-            test_accuracy, y_KF, _ = calculate_accuracy(model, test_loader, num_classes, test=True)
+        for i in range(2):
+            test_accuracy, y_KF, _ = calculate_accuracy(model, test_loader, num_classes, test=True, verbose=True)
             print(f'Test Accuracy: {test_accuracy * 100:.2f}%')
 
         print("Calculating accuracy using KF-based model multiple times")
-        for i in range(3):
+        for i in range(2):
             test_accuracy_KF, _ = calculate_accuracy_KF(args, model, test_loader, num_classes, y_KF, R_est, device)
             print(f'Test Accuracy KF: {test_accuracy_KF * 100:.2f}%')
             test_accuracy_list.append(test_accuracy_KF*100)
