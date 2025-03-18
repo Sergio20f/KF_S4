@@ -118,7 +118,6 @@ class ReservoirLinearRNN_Block(nn.Module):
                 outputs.append(h_pred.unsqueeze(1))
             
         # (batch, seq_len, hidden_size)
-        # H_seq_pre = torch.stack(outputs, dim=0) # (seq_length, hidden_size)
         H_seq_pre = torch.cat(outputs, dim=1)
         residual = self.residual_proj(x) # (batch, seq_length, hidden_size)
         H_seq = self.layer_norm(H_seq_pre + residual) # (1, 50, 128) + (128) i.e. C = I
