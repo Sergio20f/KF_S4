@@ -28,6 +28,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler, MaxAbsScaler, Ro
 from scipy.stats import t as t_dist
 
 
+
 class SinusoidalDataset(Dataset):
     def __init__(self, num_samples, seq_length=100, num_features=1, 
                  freq_min=10, freq_max=500, num_classes=100, noise=0,
@@ -53,8 +54,8 @@ class SinusoidalDataset(Dataset):
         return self.num_samples
 
     def __getitem__(self, idx):
-        np.random.seed(314) # TODO: remove
-        idx = 0 # TODO: remove
+        #np.random.seed(314) # TODO: remove
+        #idx = 0 # TODO: remove
         # Generate frequencies for each class
         frequencies = [i for i in range(self.freq_min, self.freq_max + 1, 
                                           (self.freq_max - self.freq_min) // self.num_classes)]
@@ -101,6 +102,62 @@ class SinusoidalDataset(Dataset):
                   'label': label}
 
         return sample
+
+class DeterministicSinusoidalDataset(Dataset):
+    def __init__(self, num_samples, seq_length=100, num_features=1, 
+                 freq_min=10, freq_max=500, num_classes=100, noise=0,
+                 add_outlier=0, outlier_factor=3, seed=42):
+        self.num_samples = num_samples
+        self.seq_length = seq_length
+        self.num_features = num_features
+        self.freq_min = freq_min
+        self.freq_max = freq_max
+        self.num_classes = num_classes
+        self.noise = noise
+        self.add_outlier = add_outlier
+        self.outlier_factor = outlier_factor
+        
+        # Precompute all samples deterministically
+        self.samples = []
+        # Create frequencies for each class deterministically.
+        frequencies = [i for i in range(self.freq_min, self.freq_max + 1,
+                                          (self.freq_max - self.freq_min) // self.num_classes)]
+        for idx in range(num_samples):
+            freq = frequencies[idx % self.num_classes]
+            t = np.linspace(0, 1, self.seq_length)
+            
+            # Use a deterministic phase based on idx.
+            phase = 2 * np.pi * ((idx % 100) / 100)  # example deterministic function
+            signal = 0.5 * np.sin(2 * np.pi * freq * t + phase)
+            
+            # Replace random noise with a fixed pattern (or zero noise)
+            signal += 0.1 * np.sin(2 * np.pi * t)
+            
+            # Deterministic trend: choose based on idx (even/odd)
+            trend = np.linspace(-0.5, 0.5, self.seq_length)
+            if idx % 2 == 0:
+                trend = np.square(trend)
+            else:
+                trend = -np.square(trend)
+            signal += trend
+            
+            # Add complex patterns (these remain deterministic)
+            signal += 0.2 * np.sin(4 * np.pi * freq * t) + 0.1 * np.sin(8 * np.pi * freq * t)
+            
+            # Optionally handle noise or outliers in a deterministic way here.
+            label = frequencies.index(freq)
+            sample = {
+                'input': torch.tensor(signal, dtype=torch.float).view(-1, self.num_features),
+                'label': label
+            }
+            self.samples.append(sample)
+            
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        return self.samples[idx]
+
     
 class SinusoidalDatasetLong(Dataset):
     def __init__(self, num_samples, seq_length=100, num_features=1, freq_min=10, freq_max=500, num_classes=20):
