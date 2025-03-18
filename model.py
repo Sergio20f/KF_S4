@@ -122,9 +122,9 @@ class ReservoirLinearRNN_Block(nn.Module):
                 # # Kalman Gain
                 # # K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2)
                 # K = torch.linalg.solve(S, Sigma_pred @ self.A.transpose(-1, -2)).transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size
-                # K = torch.linalg.lstsq(S, Sigma_pred @ self.A.transpose(-1, -2))[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # could be faster
-                # K = torch.eye(self.hidden_size, device=x.device).expand(1, -1, -1)
-                K = torch.linalg.lstsq(S, self.A @ Sigma_pred)[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # double check
+                K = torch.linalg.lstsq(S, Sigma_pred @ self.A.transpose(-1, -2))[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # could be faster
+                # K = torch.eye(self.hidden_size, device=x.device).expand(1, -1, -1)w
+                # K = torch.linalg.lstsq(S, self.A @ Sigma_pred)[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # double check
 
                 # # Update Step
                 h_pred = h_pred + torch.matmul(K, err.unsqueeze(-1)).squeeze(-1)
