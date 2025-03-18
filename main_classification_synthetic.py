@@ -19,13 +19,13 @@ random.seed(0)
 
 parser = argparse.ArgumentParser(description='PyTorch Transformer on Time series forecasting')
 
-parser.add_argument('--batch_size', default=1, type=int, # Changed from 10
+parser.add_argument('--batch_size', default=10, type=int, # Changed from 10
                     help='mini-batch size (default: 64)')
 parser.add_argument('--eval_batch_size', default=-1, type=int,
                     help='eval_batch_size default is equal to training batch_size')
-parser.add_argument('--nlayers', default=4, type=int,
+parser.add_argument('--nlayers', default=1, type=int,
                     help='number of layers')
-parser.add_argument('--epoch', default=1, type=int, # Changed
+parser.add_argument('--epoch', default=20, type=int, # Changed
                     help='epoch (default: 1)')
 parser.add_argument('--lr',default=0.001, type=float,
                     help='initial learning rate')
@@ -69,7 +69,7 @@ def main(hyperp_tuning=False):
         num_samples = 1000
         seq_length = 100
 
-        num_features = 2 # TODO: Does this make the seq_length = seq_length/num_features?
+        num_features = 1
 
         freq_min=10 
         freq_max=500 
@@ -77,10 +77,10 @@ def main(hyperp_tuning=False):
     
         dataset = SinusoidalDataset(num_samples, seq_length, num_features, freq_min, freq_max, num_classes)
         data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-        val_dataset = SinusoidalDataset(int(num_samples/4), seq_length, num_features, freq_min, freq_max, num_classes)
+        val_dataset = DeterministicSinusoidalDataset(int(num_samples/4), seq_length, num_features, freq_min, freq_max, num_classes)
         val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
         # test_dataset = SinusoidalDataset(int(num_samples/2), seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=5, outlier_factor=5)
-        test_dataset = SinusoidalDataset(1, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=10, outlier_factor=5)
+        test_dataset = DeterministicSinusoidalDataset(num_samples, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=50, outlier_factor=5)
         test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False)
     
     elif (args.dataset == 'sinusoidal_long'):
@@ -88,7 +88,7 @@ def main(hyperp_tuning=False):
         num_samples = 1000
         seq_length = 100
 
-        num_features = 2
+        num_features = 1
 
         freq_min=10 
         freq_max=500 
@@ -133,6 +133,7 @@ def main(hyperp_tuning=False):
         epoch_loss = 0.0  # Variable to store the total loss for the epoch
         for idx, batch in enumerate(data_loader):
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
+
             
             outputs, _ = model(inputs) # 2 outputs if reservoir-linear-RNN
             outputs = outputs.to(device)

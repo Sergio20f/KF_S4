@@ -61,6 +61,10 @@ class ReservoirLinearRNN_Block(nn.Module):
         
     def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=3):
         # (batch, seq_len, input_size)
+        batch, seq_len, nfeat = x.shape
+        # if y_KF is not None:
+            # print("x", x)
+            # print("x shape", x.shape)
         batch, seq_len, _ = x.shape
 
         if y_KF is None:
@@ -152,6 +156,7 @@ class ReservoirLinearRNN(nn.Module):
             y_KF_list.append(y_KF_val)
         last_output = x#[:, -1, :]
         logits = self.final_linear(last_output)
+        return logits, y_KF_list
         return logits, y_KF_list
 
 ###################################################### BASELINES #################################################################
