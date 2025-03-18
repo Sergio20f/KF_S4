@@ -57,7 +57,7 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, de
         for idx, batch in enumerate(data_loader):
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
 
-            outputs, _ = model(inputs.to(device), y_KF=y_KF.to(device), R=R.to(device), Sigma_pred=Sigma_pred.to(device))
+            outputs, y_KF_test = model(inputs.to(device), y_KF=y_KF.to(device), R=R.to(device), Sigma_pred=Sigma_pred.to(device))
 
             predicted_labels = torch.argmax(outputs, dim=1)
             total += labels.size(0)
@@ -70,7 +70,7 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, de
             error_distribution = {label.item(): count.item() for label, count in zip(unique_labels, error_counts) if count > 0}
 
     accuracy = correct / total
-    return accuracy, error_distribution
+    return accuracy, error_distribution, y_KF_test
 
 def init_reservoir_matrix(hidden_size):
     print("Initializing reservoir matrix")

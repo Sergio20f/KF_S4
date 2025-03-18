@@ -19,13 +19,13 @@ random.seed(0)
 
 parser = argparse.ArgumentParser(description='PyTorch Transformer on Time series forecasting')
 
-parser.add_argument('--batch_size', default=10, type=int, # Changed from 10
+parser.add_argument('--batch_size', default=1, type=int, # Changed from 10
                     help='mini-batch size (default: 64)')
 parser.add_argument('--eval_batch_size', default=-1, type=int,
                     help='eval_batch_size default is equal to training batch_size')
 parser.add_argument('--nlayers', default=1, type=int,
                     help='number of layers')
-parser.add_argument('--epoch', default=20, type=int, # Changed
+parser.add_argument('--epoch', default=1, type=int, # Changed
                     help='epoch (default: 1)')
 parser.add_argument('--lr',default=0.001, type=float,
                     help='initial learning rate')
@@ -69,7 +69,7 @@ def main(hyperp_tuning=False):
         num_samples = 1000
         seq_length = 100
 
-        num_features = 1
+        num_features = 2
 
         freq_min=10 
         freq_max=500 
@@ -79,8 +79,7 @@ def main(hyperp_tuning=False):
         data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
         val_dataset = DeterministicSinusoidalDataset(int(num_samples/4), seq_length, num_features, freq_min, freq_max, num_classes)
         val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
-        # test_dataset = SinusoidalDataset(int(num_samples/2), seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=5, outlier_factor=5)
-        test_dataset = DeterministicSinusoidalDataset(num_samples, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=50, outlier_factor=5)
+        test_dataset = DeterministicSinusoidalDataset(1, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=0, outlier_factor=20)
         test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False)
     
     elif (args.dataset == 'sinusoidal_long'):
@@ -168,15 +167,20 @@ def main(hyperp_tuning=False):
         # print(f'R_est: {R_est.cpu().numpy():.2f}')
 
         print("Forward pass on test data to collect y_KFs multiple times")
-        for i in range(2):
+        for i in range(1):
             test_accuracy, y_KF, _ = calculate_accuracy(model, test_loader, num_classes, test=True, verbose=True)
             print(f'Test Accuracy: {test_accuracy * 100:.2f}%')
 
         print("Calculating accuracy using KF-based model multiple times")
-        for i in range(2):
-            test_accuracy_KF, _ = calculate_accuracy_KF(args, model, test_loader, num_classes, y_KF, R_est, device)
+        for i in range(1):
+            test_accuracy_KF, _, y_KF_test = calculate_accuracy_KF(args, model, test_loader, num_classes, y_KF, R_est, device)
             print(f'Test Accuracy KF: {test_accuracy_KF * 100:.2f}%')
             test_accuracy_list.append(test_accuracy_KF*100)
+
+        if torch.equal(y_KF[0], y_KF_test[0]):
+            print("y_KF and y_KF_test are the same.")
+        else:
+            print("y_KF and y_KF_test are different.")
 
 if __name__ == '__main__':
     main()

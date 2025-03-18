@@ -54,8 +54,6 @@ class SinusoidalDataset(Dataset):
         return self.num_samples
 
     def __getitem__(self, idx):
-        #np.random.seed(314) # TODO: remove
-        #idx = 0 # TODO: remove
         # Generate frequencies for each class
         frequencies = [i for i in range(self.freq_min, self.freq_max + 1, 
                                           (self.freq_max - self.freq_min) // self.num_classes)]
@@ -106,7 +104,7 @@ class SinusoidalDataset(Dataset):
 class DeterministicSinusoidalDataset(Dataset):
     def __init__(self, num_samples, seq_length=100, num_features=1, 
                  freq_min=10, freq_max=500, num_classes=100, noise=0,
-                 add_outlier=0, outlier_factor=3, seed=42):
+                 add_outlier=0, outlier_factor=3):
         self.num_samples = num_samples
         self.seq_length = seq_length
         self.num_features = num_features
@@ -117,7 +115,6 @@ class DeterministicSinusoidalDataset(Dataset):
         self.add_outlier = add_outlier
         self.outlier_factor = outlier_factor
         
-        # Precompute all samples deterministically
         self.samples = []
         # Create frequencies for each class deterministically.
         frequencies = [i for i in range(self.freq_min, self.freq_max + 1,
@@ -144,14 +141,34 @@ class DeterministicSinusoidalDataset(Dataset):
             # Add complex patterns (these remain deterministic)
             signal += 0.2 * np.sin(4 * np.pi * freq * t) + 0.1 * np.sin(8 * np.pi * freq * t)
             
-            # Optionally handle noise or outliers in a deterministic way here.
+            if self.noise > 0.:
+                # signal += self.noise * np.random.randn(self.seq_length)
+                signal += self.noise * t_dist.rvs(2.01, size=self.seq_length)
+
+            # Optionally add outliers only in the later part of the sequence (80th to 95th percentile)
+            if self.add_outlier > 0:
+                std = np.std(signal)
+                lower_bound = int(self.seq_length * 0.8)
+                upper_bound = int(self.seq_length * 0.95)
+                # Ensure at least one index is available
+                if upper_bound <= lower_bound:
+                    lower_bound = self.seq_length - 1
+                    upper_bound = self.seq_length
+                available_indices = np.arange(lower_bound, upper_bound)
+                num_outliers = min(self.add_outlier, len(available_indices))
+                # Use np.random.choice with replace=False to choose unique indices
+                outlier_indices = np.random.choice(available_indices, size=num_outliers, replace=False)
+                for idx_outlier in outlier_indices:
+                    sign = np.random.choice([-1, 1])
+                    signal[idx_outlier] = signal[idx_outlier] + sign * self.outlier_factor * std
+
             label = frequencies.index(freq)
             sample = {
                 'input': torch.tensor(signal, dtype=torch.float).view(-1, self.num_features),
                 'label': label
             }
             self.samples.append(sample)
-            
+        
     def __len__(self):
         return self.num_samples
 

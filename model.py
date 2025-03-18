@@ -59,13 +59,9 @@ class ReservoirLinearRNN_Block(nn.Module):
         # Final MLP
         self.mlp = MLP(hidden_size, mlp_hidden_dim, hidden_size, mlp_num_layers)
         
-    def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=3):
+    def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=5):
         # (batch, seq_len, input_size)
         batch, seq_len, nfeat = x.shape
-        # if y_KF is not None:
-            # print("x", x)
-            # print("x shape", x.shape)
-        batch, seq_len, _ = x.shape
 
         if y_KF is None:
             h = None
@@ -91,7 +87,11 @@ class ReservoirLinearRNN_Block(nn.Module):
             R = R.expand(1, -1, -1)
 
             for t in range(seq_len):
-                xt = x[:, t, :]  # (batch, input_size)
+                if t == 0: # TEMP
+                    xt = x[:, 0, :]
+                else:
+                    xt = x[:, t-1, :]  # (batch, input_size)
+
                 u_t = self.encoder(xt) # (batch, M)
                 Bu_t = self.B(u_t)
 
@@ -101,24 +101,26 @@ class ReservoirLinearRNN_Block(nn.Module):
                 else:
                     h_pred = torch.matmul(h_pred, self.A) + Bu_t # We want -> (hidden_size)
 
-                # Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2)
+                Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2)
 
                 # # Innovation
                 # # err = y - self.C @ h_pred
                 # # S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + R # Model R with torch.var(y_KF) * torch.eye(hidden_size)
-                # err = y[:, t, :] - h_pred # TEMP FIX: Assuming only one batch
-                # # wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c) # WoLF
-                # # S = Sigma_pred + R / wt
+                err = y[:, t, :] - h_pred # TEMP FIX: Assuming only one batch
+                wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c) # WoLF
+                print("wt", wt.item(), end="\t")
+                S = Sigma_pred + R / wt
+                # print("err", torch.linalg.norm(err)**2, end="\t")
                 # S = Sigma_pred
 
                 # # Kalman Gain
                 # # K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2)
-                # # K = torch.linalg.solve(S, Sigma_pred).transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size
+                K = torch.linalg.solve(S, Sigma_pred).transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size
                 # K = torch.eye(self.hidden_size, device=x.device).expand(1, -1, -1)
 
                 # # Update Step
-                # h_pred = h_pred + torch.matmul(K, err.unsqueeze(-1)).squeeze(-1)
-                # Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
+                h_pred = h_pred + torch.matmul(K, err.unsqueeze(-1)).squeeze(-1)
+                Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
                 outputs.append(h_pred.unsqueeze(1))
             
         # (batch, seq_len, hidden_size)
@@ -156,7 +158,7 @@ class ReservoirLinearRNN(nn.Module):
             y_KF_list.append(y_KF_val)
         last_output = x#[:, -1, :]
         logits = self.final_linear(last_output)
-        return logits, y_KF_list
+
         return logits, y_KF_list
 
 ###################################################### BASELINES #################################################################
