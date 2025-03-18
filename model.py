@@ -85,10 +85,12 @@ class ReservoirLinearRNN_Block(nn.Module):
             outputs = []
             Sigma_pred = Sigma_pred.expand(1, -1, -1)
             R = R.expand(1, -1, -1)
+            qt = 1e-3
+            R = self.B.weight @ self.B.weight.transpose(-1, -2) * qt # is hparam? 
 
             for t in range(seq_len):
                 if t == 0: # TEMP
-                    xt = x[:, 0, :]
+                    xt = torch.zeros_like(x[:, 0, :])
                 else:
                     xt = x[:, t-1, :]  # (batch, input_size)
 
@@ -101,28 +103,38 @@ class ReservoirLinearRNN_Block(nn.Module):
                 else:
                     h_pred = torch.matmul(h_pred, self.A) + Bu_t # We want -> (hidden_size)
 
-                Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2)
+                Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2) + torch.eye(self.hidden_size, device=x.device) * qt
 
+                # TODO; try Mahalanobis distance
                 # # Innovation
                 # # err = y - self.C @ h_pred
                 # # S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + R # Model R with torch.var(y_KF) * torch.eye(hidden_size)
-                err = y[:, t, :] - h_pred # TEMP FIX: Assuming only one batch
-                wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c) # WoLF
+                err = y[:, t, :] - self.B(self.encoder(x[:, t, :])) - torch.matmul(h_pred, self.A) # TEMP FIX: Assuming only one batch
+                wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c**2) # WoLF
                 print("wt", wt.item(), end="\t")
-                S = Sigma_pred + R / wt
-                # print("err", torch.linalg.norm(err)**2, end="\t")
+                S = (
+                    self.A @ Sigma_pred @ self.A.transpose(-1, -2)
+                    + R / wt
+                    + torch.eye(self.hidden_size, device=x.device) * 2.0
+                )
                 # S = Sigma_pred
 
                 # # Kalman Gain
                 # # K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2)
-                K = torch.linalg.solve(S, Sigma_pred).transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size
+                # K = torch.linalg.solve(S, Sigma_pred @ self.A.transpose(-1, -2)).transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size
+                # K = torch.linalg.lstsq(S, Sigma_pred @ self.A.transpose(-1, -2))[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # could be faster
                 # K = torch.eye(self.hidden_size, device=x.device).expand(1, -1, -1)
+                K = torch.linalg.lstsq(S, self.A @ Sigma_pred)[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # double check
 
                 # # Update Step
                 h_pred = h_pred + torch.matmul(K, err.unsqueeze(-1)).squeeze(-1)
                 Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
                 outputs.append(h_pred.unsqueeze(1))
-            
+                
+                err_update = y[:, t, :] - h_pred
+                wt_update = 1 / torch.sqrt(1 + torch.linalg.norm(err_update) ** 2 / c**2) # WoLF
+                print("wt-update", wt_update.item(), end="\n")
+        
         # (batch, seq_len, hidden_size)
         H_seq_pre = torch.cat(outputs, dim=1)
         residual = self.residual_proj(x) # (batch, seq_length, hidden_size)
