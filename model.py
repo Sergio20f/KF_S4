@@ -62,6 +62,8 @@ class ReservoirLinearRNN_Block(nn.Module):
     def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=5):
         # (batch, seq_len, input_size)
         batch, seq_len, nfeat = x.shape
+        wt_list = []
+        wt_update_list = []
 
         if y_KF is None:
             h = None
@@ -81,59 +83,70 @@ class ReservoirLinearRNN_Block(nn.Module):
 
         else:
             y = y_KF # (batch, seq_len, hidden_size)
-            h_pred = None
+
+            theta_pred = None
+            P_post = Sigma_pred.expand(1, -1, -1)
+            qt = 1.0
+            Q = torch.eye(self.hidden_size, device=device) * qt
+            BQB = self.B.weight @ self.B.weight.transpose(-1, -2) * qt # is hparam? # Q.expand(1, -1, -1)
+
             outputs = []
-            Sigma_pred = Sigma_pred.expand(1, -1, -1)
-            R = R.expand(1, -1, -1)
-            qt = 1e-3
-            R = self.B.weight @ self.B.weight.transpose(-1, -2) * qt # is hparam? 
 
             for t in range(seq_len):
                 if t == 0: # TEMP
-                    xt = torch.zeros_like(x[:, 0, :])
+                    x_prev = torch.zeros_like(x[:, 0, :])
                 else:
-                    xt = x[:, t-1, :]  # (batch, input_size)
+                    x_prev = x[:, t-1, :]  # (batch, input_size)
 
-                u_t = self.encoder(xt) # (batch, M)
+                # u_{t-1}
+                u_prev = self.encoder(x_prev) # (batch, M)
+                Bu_prev = self.B(u_prev)
+
+                # u_t
+                u_t = self.encoder(x[:, t, :])
                 Bu_t = self.B(u_t)
 
-                # Predict Step
-                if h_pred is None:
-                    h_pred = Bu_t # We want -> (hidden_size)
+                # Predict Step for θ
+                if theta_pred is None:
+                    theta_pred = Bu_prev # We want -> (hidden_size)
                 else:
-                    h_pred = torch.matmul(h_pred, self.A) + Bu_t # We want -> (hidden_size)
+                    theta_pred = torch.matmul(theta_pred, self.A) + Bu_prev # We want -> (hidden_size)
 
-                Sigma_pred = self.A @ Sigma_pred @ self.A.transpose(-1, -2) + torch.eye(self.hidden_size, device=x.device) * qt
+                # Predict covariance
+                P_pred = self.A @ P_post @ self.A.transpose(-1, -2) + Q # TODO: + torch.eye(self.hidden_size, device=x.device) * qt -- wrong?
 
-                # TODO; try Mahalanobis distance
-                # # Innovation
-                # # err = y - self.C @ h_pred
-                # # S = self.C @ Sigma_pred @ self.C.transpose(-1, -2) + R # Model R with torch.var(y_KF) * torch.eye(hidden_size)
-                err = y[:, t, :] - self.B(self.encoder(x[:, t, :])) - torch.matmul(h_pred, self.A) # TEMP FIX: Assuming only one batch
+                # TODO: try Mahalanobis distance
+                # Innovation -- Measurement: r_t = h_t - Bu_t = y[:, t, :] - B(self.encoder(x[:, t, :])) = A theta_t - A theta_pred
+                err = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
                 wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c**2) # WoLF
                 print("wt", wt.item(), end="\t")
+                
                 S = (
-                    self.A @ Sigma_pred @ self.A.transpose(-1, -2)
-                    + R / wt
-                    + torch.eye(self.hidden_size, device=x.device) * 2.0
+                    self.A @ P_pred @ self.A.transpose(-1, -2)
+                    + BQB / wt
                 )
-                # S = Sigma_pred
 
-                # # Kalman Gain
-                # # K = torch.linalg.solve(S, self.C @ Sigma_pred).transpose(-1, -2)
-                # K = torch.linalg.solve(S, Sigma_pred @ self.A.transpose(-1, -2)).transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size
-                K = torch.linalg.lstsq(S, Sigma_pred @ self.A.transpose(-1, -2))[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # could be faster
-                # K = torch.eye(self.hidden_size, device=x.device).expand(1, -1, -1)w
-                # K = torch.linalg.lstsq(S, self.A @ Sigma_pred)[0].transpose(-1, -2).expand(1, -1, -1) # 1, hidden_size, hidden_size # double check
+                # Kalman Gain
+                gain_rhs = P_pred @ self.A.transpose(-1, -2)
+                X_T = torch.linalg.lstsq(S, gain_rhs.transpose(-1, -2))[0] # lstsq could be faster
+                K = X_T.transpose(-1, -2).expand(1, -1, -1)
 
                 # # Update Step
-                h_pred = h_pred + torch.matmul(K, err.unsqueeze(-1)).squeeze(-1)
-                Sigma_pred = Sigma_pred - K @ S @ K.transpose(-1, -2)
+                theta_pred = theta_pred + torch.matmul(err, K)
+                theta_pred = theta_pred.squeeze(0)
+                P_pred = P_pred - K @ S @ K.transpose(-1, -2)
+
+                # Mapping to h space
+                h_pred = torch.matmul(theta_pred, self.A) + Bu_t
                 outputs.append(h_pred.unsqueeze(1))
                 
-                err_update = y[:, t, :] - h_pred
+                err_update = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
                 wt_update = 1 / torch.sqrt(1 + torch.linalg.norm(err_update) ** 2 / c**2) # WoLF
                 print("wt-update", wt_update.item(), end="\n")
+
+                # For plotting purposes
+                wt_list.append(wt.item())
+                wt_update_list.append(wt_update.item())
         
         # (batch, seq_len, hidden_size)
         H_seq_pre = torch.cat(outputs, dim=1)
@@ -142,7 +155,7 @@ class ReservoirLinearRNN_Block(nn.Module):
 
         h_last = H_seq[:, -1, :] # (batch, hidden_size)
         out = self.mlp(h_last)
-        return out, H_seq_pre
+        return out, H_seq_pre, (wt_list, wt_update_list)
 
 class ReservoirLinearRNN(nn.Module):
     def __init__(self, input_size, encode_dim, hidden_size, mlp_hidden_dim, mlp_num_layers, num_layers, num_classes):
@@ -165,13 +178,15 @@ class ReservoirLinearRNN(nn.Module):
     
     def forward(self, x, y_KF=None, R=None, Sigma_pred=None):
         y_KF_list = [] # List of y's for each block (each element of the list is a tensor of shape (batch, seq_len, hidden_size))
+        w_lists = []
         for block in self.blocks:
-            x, y_KF_val = block(x, y_KF=y_KF, R=R, Sigma_pred=Sigma_pred)
+            x, y_KF_val, w_sublist = block(x, y_KF=y_KF, R=R, Sigma_pred=Sigma_pred)
             y_KF_list.append(y_KF_val)
+            w_lists.append(w_sublist)
         last_output = x#[:, -1, :]
         logits = self.final_linear(last_output)
 
-        return logits, y_KF_list
+        return logits, y_KF_list, w_lists
 
 ###################################################### BASELINES #################################################################
 

@@ -69,7 +69,7 @@ def main(hyperp_tuning=False):
         num_samples = 1000
         seq_length = 100
 
-        num_features = 2
+        num_features = 1
 
         freq_min=10 
         freq_max=500 
@@ -79,7 +79,7 @@ def main(hyperp_tuning=False):
         data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
         val_dataset = DeterministicSinusoidalDataset(int(num_samples/4), seq_length, num_features, freq_min, freq_max, num_classes)
         val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
-        test_dataset = DeterministicSinusoidalDataset(1, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=0, outlier_factor=20)
+        test_dataset = DeterministicSinusoidalDataset(10, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=0, outlier_factor=20)
         test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False)
     
     elif (args.dataset == 'sinusoidal_long'):
@@ -132,9 +132,8 @@ def main(hyperp_tuning=False):
         epoch_loss = 0.0  # Variable to store the total loss for the epoch
         for idx, batch in enumerate(data_loader):
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
-
             
-            outputs, _ = model(inputs) # 2 outputs if reservoir-linear-RNN
+            outputs, _, _ = model(inputs) # 2 outputs if reservoir-linear-RNN
             outputs = outputs.to(device)
             loss = criterion(outputs, labels)
             epoch_loss += loss.item()  # Add the loss of the current batch to the epoch loss
