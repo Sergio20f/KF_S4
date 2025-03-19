@@ -14,6 +14,7 @@ def calculate_accuracy(model, data_loader, num_classes, test=False, verbose=Fals
     total = 0
     correct = 0
     error_distribution = {}
+    y_KF_list = []
 
     with torch.no_grad():
         for batch in data_loader:
@@ -35,15 +36,17 @@ def calculate_accuracy(model, data_loader, num_classes, test=False, verbose=Fals
             unique_labels = torch.unique(incorrect_labels)
             error_counts = torch.bincount(incorrect_labels, minlength=num_classes)
             error_distribution = {label.item(): count.item() for label, count in zip(unique_labels, error_counts) if count > 0}
+            if test:
+                y_KF_list.append(y_KF)
     
     accuracy = correct / total
 
     if test:
-        return accuracy, y_KF, error_distribution
+        return accuracy, y_KF_list, error_distribution
     else:
         return accuracy, error_distribution
 
-def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, device):
+def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF_list, R_est, device):
     model.eval()
     correct = 0
     total = 0
@@ -54,9 +57,10 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, de
     Sigma_pred = alpha * torch.eye(args.hidden_dim)
     R = R_est * torch.eye(args.hidden_dim).to(device) # TODO: Change for dense matrix eventually
 
-    y_KF = y_KF[0] # TODO: This only works when we have one reservoir block. Need to change this for multiple blocks and batches
+    # y_KF = y_KF[0] # TODO: This only works when we have one reservoir block. Need to change this for multiple blocks and batches
     with torch.no_grad():
         for idx, batch in enumerate(data_loader):
+            y_KF = y_KF_list[idx][0]
             inputs, labels = batch['input'].to(device), batch['label'].to(device)
 
             outputs, y_KF_test, wt_plot = model(inputs.to(device), y_KF=y_KF.to(device), R=R.to(device), Sigma_pred=Sigma_pred.to(device))
@@ -66,9 +70,6 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF, R_est, de
                 w_t_update=wt_plot[0][1],
                 filename=f"full_plot_{idx}.png"
             )
-            # plot_and_store_time_series(inputs, filename=f"input_{idx}.png")
-            # plot_w(wt_plot[0][0], filename=f"wt_{idx}.png")
-            # plot_w(wt_plot[0][1], ylabel="w_t_update", title="w_t_update values", filename=f"wt_update_{idx}.png")
 
             predicted_labels = torch.argmax(outputs, dim=1)
             total += labels.size(0)

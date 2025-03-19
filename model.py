@@ -119,7 +119,7 @@ class ReservoirLinearRNN_Block(nn.Module):
                 # Innovation -- Measurement: r_t = h_t - Bu_t = y[:, t, :] - B(self.encoder(x[:, t, :])) = A theta_t - A theta_pred
                 err = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
                 wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c**2) # WoLF
-                print("wt", wt.item(), end="\t")
+                # print("wt", wt.item(), end="\t")
                 
                 S = (
                     self.A @ P_pred @ self.A.transpose(-1, -2)
@@ -142,7 +142,7 @@ class ReservoirLinearRNN_Block(nn.Module):
                 
                 err_update = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
                 wt_update = 1 / torch.sqrt(1 + torch.linalg.norm(err_update) ** 2 / c**2) # WoLF
-                print("wt-update", wt_update.item(), end="\n")
+                # print("wt-update", wt_update.item(), end="\n")
 
                 # For plotting purposes
                 wt_list.append(wt.item())
