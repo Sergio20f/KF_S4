@@ -118,8 +118,9 @@ class ReservoirLinearRNN_Block(nn.Module):
                 # TODO: try Mahalanobis distance
                 # Innovation -- Measurement: r_t = h_t - Bu_t = y[:, t, :] - B(self.encoder(x[:, t, :])) = A theta_t - A theta_pred
                 err = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
-                wt = 1 / torch.sqrt(1 + torch.linalg.norm(err) ** 2 / c**2) # WoLF
-                # print("wt", wt.item(), end="\t")
+                err_downdate = Bu_t - Bu_prev
+                # err_downdate = y[:, t, :] - torch.matmul(theta_pred, self.A) # Atheta_t = A @ (A\theta_t-1 + Bu_t-1) # - Bu_t
+                wt = 1 / torch.sqrt(1 + torch.linalg.norm(err_downdate) ** 2 / c**2) # WoLF
                 
                 S = (
                     self.A @ P_pred @ self.A.transpose(-1, -2)
@@ -137,12 +138,11 @@ class ReservoirLinearRNN_Block(nn.Module):
                 P_pred = P_pred - K @ S @ K.transpose(-1, -2)
 
                 # Mapping to h space
-                h_pred = torch.matmul(theta_pred, self.A) + Bu_t
+                h_pred = torch.matmul(theta_pred, self.A) + Bu_prev
                 outputs.append(h_pred.unsqueeze(1))
                 
                 err_update = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
                 wt_update = 1 / torch.sqrt(1 + torch.linalg.norm(err_update) ** 2 / c**2) # WoLF
-                # print("wt-update", wt_update.item(), end="\n")
 
                 # For plotting purposes
                 wt_list.append(wt.item())

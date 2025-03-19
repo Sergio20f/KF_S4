@@ -79,7 +79,7 @@ def main(hyperp_tuning=False):
         data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
         val_dataset = DeterministicSinusoidalDataset(int(num_samples/4), seq_length, num_features, freq_min, freq_max, num_classes)
         val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
-        test_dataset = DeterministicSinusoidalDataset(2, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=5, outlier_factor=20)
+        test_dataset = DeterministicSinusoidalDataset(2, seq_length, num_features, freq_min, freq_max, num_classes, add_outlier=0, outlier_factor=20)
         test_loader = DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False)
     
     elif (args.dataset == 'sinusoidal_long'):
