@@ -98,6 +98,13 @@ def init_reservoir_matrix(hidden_size):
     return Q
 
 def plot_full_time_series(inputs, w_t, w_t_update, filename, save_path="time_series_plots"):
+    # Print the index when w_t is 0
+    zero_indices = np.where(np.array(w_t) == 0)[0]
+    if zero_indices.size > 0:
+        print(f"Indices where w_t is 0: {zero_indices}")
+    else:
+        print("No indices where w_t is 0")
+
     # Ensure save directory exists
     os.makedirs(save_path, exist_ok=True)
 

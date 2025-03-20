@@ -59,7 +59,7 @@ class ReservoirLinearRNN_Block(nn.Module):
         # Final MLP
         self.mlp = MLP(hidden_size, mlp_hidden_dim, hidden_size, mlp_num_layers)
         
-    def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=5):
+    def forward(self, x, y_KF=None, R=None, Sigma_pred=None, c=5.0):
         # (batch, seq_len, input_size)
         batch, seq_len, nfeat = x.shape
         wt_list = []
@@ -89,7 +89,8 @@ class ReservoirLinearRNN_Block(nn.Module):
             qt = 1.0
             Q = torch.eye(self.hidden_size, device=device) * qt
             BQB = self.B.weight @ self.B.weight.transpose(-1, -2) * qt # is hparam? # Q.expand(1, -1, -1)
-
+            w_last = 1.0
+            theta_pred_last = None
             outputs = []
 
             for t in range(seq_len):
@@ -99,8 +100,12 @@ class ReservoirLinearRNN_Block(nn.Module):
                     x_prev = x[:, t-1, :]  # (batch, input_size)
 
                 # u_{t-1}
-                u_prev = self.encoder(x_prev) # (batch, M)
-                Bu_prev = self.B(u_prev)
+                if w_last == 1.0:
+                    u_prev = self.encoder(x_prev) # (batch, M)
+                    Bu_prev = self.B(u_prev)
+                else:
+                    u_prev = self.encoder(x[:, t, :])
+                    Bu_prev = self.B(u_prev)
 
                 # u_t
                 u_t = self.encoder(x[:, t, :])
@@ -119,11 +124,12 @@ class ReservoirLinearRNN_Block(nn.Module):
                 # Innovation -- Measurement: r_t = h_t - Bu_t = y[:, t, :] - B(self.encoder(x[:, t, :])) = A theta_t - A theta_pred
                 err = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
                 err_downdate = Bu_t - Bu_prev
-                # err_downdate = y[:, t, :] - torch.matmul(theta_pred, self.A) # Atheta_t = A @ (A\theta_t-1 + Bu_t-1) # - Bu_t
                 wt = 1 / torch.sqrt(1 + torch.linalg.norm(err_downdate) ** 2 / c**2) # WoLF
                 wt = torch.tensor([1.0], device=device) if wt >= 0.2 else torch.tensor([0.], device=device)
+                w_last = wt # Keeping track of outlier
                 
-                weighted_BQB = BQB if wt == 1.0 else torch.eye(len(BQB)).to(device) * 1e6
+                weighted_BQB = BQB if wt == 1.0 else torch.eye(len(BQB)).to(device) * 1e3
+
                 S = (
                     self.A @ P_pred @ self.A.transpose(-1, -2)
                     + weighted_BQB
@@ -132,12 +138,18 @@ class ReservoirLinearRNN_Block(nn.Module):
 
                 # Kalman Gain
                 gain_rhs = P_pred @ self.A.transpose(-1, -2)
-                X_T = torch.linalg.lstsq(S, gain_rhs.transpose(-1, -2))[0] # lstsq could be faster
+                X_T = torch.linalg.lstsq(S, gain_rhs.transpose(-1, -2))[0]
                 K = X_T.transpose(-1, -2).expand(1, -1, -1)
 
-                # # Update Step
-                theta_pred = theta_pred + torch.matmul(err, K)
+                # Update Step
+                theta_pred = theta_pred #+ torch.matmul(err, K)
                 theta_pred = theta_pred.squeeze(0)
+                # TODO: Remove this
+                if wt.item() == 0.0:
+                    theta_pred = theta_pred_last
+                else:
+                    theta_pred_last = theta_pred
+
                 P_pred = P_pred - K @ S @ K.transpose(-1, -2)
 
                 # Mapping to h space
@@ -150,6 +162,8 @@ class ReservoirLinearRNN_Block(nn.Module):
                 # For plotting purposes
                 wt_list.append(wt.item())
                 wt_update_list.append(wt_update.item())
+            num_zeros = sum(1 for wt in wt_list if wt == 0)
+            print(f"Number of zeros in wt list: {num_zeros}")
         
         # (batch, seq_len, hidden_size)
         H_seq_pre = torch.cat(outputs, dim=1)

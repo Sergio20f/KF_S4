@@ -158,6 +158,7 @@ class DeterministicSinusoidalDataset(Dataset):
                 num_outliers = min(self.add_outlier, len(available_indices))
                 # Use np.random.choice with replace=False to choose unique indices
                 outlier_indices = np.random.choice(available_indices, size=num_outliers, replace=False)
+                print("Outlier Indices: ", outlier_indices)
                 for idx_outlier in outlier_indices:
                     sign = np.random.choice([-1, 1])
                     signal[idx_outlier] = signal[idx_outlier] + sign * self.outlier_factor * std
