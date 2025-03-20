@@ -121,10 +121,13 @@ class ReservoirLinearRNN_Block(nn.Module):
                 err_downdate = Bu_t - Bu_prev
                 # err_downdate = y[:, t, :] - torch.matmul(theta_pred, self.A) # Atheta_t = A @ (A\theta_t-1 + Bu_t-1) # - Bu_t
                 wt = 1 / torch.sqrt(1 + torch.linalg.norm(err_downdate) ** 2 / c**2) # WoLF
+                wt = torch.tensor([1.0], device=device) if wt >= 0.2 else torch.tensor([0.], device=device)
                 
+                weighted_BQB = BQB if wt == 1.0 else torch.eye(len(BQB)).to(device) * 1e6
                 S = (
                     self.A @ P_pred @ self.A.transpose(-1, -2)
-                    + BQB / wt
+                    + weighted_BQB
+                    # + BQB / wt
                 )
 
                 # Kalman Gain
@@ -138,7 +141,7 @@ class ReservoirLinearRNN_Block(nn.Module):
                 P_pred = P_pred - K @ S @ K.transpose(-1, -2)
 
                 # Mapping to h space
-                h_pred = torch.matmul(theta_pred, self.A) + Bu_prev
+                h_pred = torch.matmul(theta_pred, self.A) + wt*Bu_t + (1 - wt)*Bu_prev
                 outputs.append(h_pred.unsqueeze(1))
                 
                 err_update = y[:, t, :] - Bu_t - torch.matmul(theta_pred, self.A)
