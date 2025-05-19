@@ -142,14 +142,14 @@ class DeterministicSinusoidalDataset(Dataset):
             signal += 0.2 * np.sin(4 * np.pi * freq * t) + 0.1 * np.sin(8 * np.pi * freq * t)
             
             if self.noise > 0.:
-                # signal += self.noise * np.random.randn(self.seq_length)
-                signal += self.noise * t_dist.rvs(2.01, size=self.seq_length)
+                signal += self.noise * np.random.randn(self.seq_length)
+                # signal += self.noise * t_dist.rvs(2.01, size=self.seq_length)
 
             # Optionally add outliers only in the later part of the sequence (80th to 95th percentile)
             if self.add_outlier > 0:
                 std = np.std(signal)
-                lower_bound = int(self.seq_length * 0.8)
-                upper_bound = int(self.seq_length * 0.95)
+                lower_bound = int(self.seq_length * 0.) # 0.8
+                upper_bound = int(self.seq_length * 1.) # 0.95
                 # Ensure at least one index is available
                 if upper_bound <= lower_bound:
                     lower_bound = self.seq_length - 1

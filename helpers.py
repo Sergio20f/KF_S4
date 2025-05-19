@@ -68,6 +68,8 @@ def calculate_accuracy_KF(args, model, data_loader, num_classes, y_KF_list, R_es
                 inputs=inputs,
                 w_t=wt_plot[0][0],
                 w_t_update=wt_plot[0][1],
+                wt_cont_list=wt_plot[0][2],
+                err_list=wt_plot[0][3],
                 filename=f"full_plot_{idx}.png"
             )
 
@@ -97,58 +99,60 @@ def init_reservoir_matrix(hidden_size):
         Q[:, 0] = -Q[:, 0]
     return Q
 
-def plot_full_time_series(inputs, w_t, w_t_update, filename, save_path="time_series_plots"):
-    # Print the index when w_t is 0
+def plot_full_time_series(inputs, w_t, w_t_update, wt_cont_list, err_list, filename, save_path="time_series_plots"):
     zero_indices = np.where(np.array(w_t) == 0)[0]
-    if zero_indices.size > 0:
-        print(f"Indices where w_t is 0: {zero_indices}")
-    else:
-        print("No indices where w_t is 0")
+    print(f"Indices where w_t is 0: {zero_indices}" if zero_indices.size else "No indices where w_t is 0")
 
-    # Ensure save directory exists
     os.makedirs(save_path, exist_ok=True)
-
-    # Convert `inputs` to NumPy array if it's a PyTorch tensor
     if isinstance(inputs, torch.Tensor):
         inputs = inputs.cpu().numpy()
 
-    # Extract time series from batch dimension
-    series = inputs[0]  # Shape: (N, D)
-    n_steps, n_dims = series.shape  # Get time steps and dimensions
+    series = inputs[0]
+    n_steps, n_dims = series.shape
+    total_plots = n_dims + 4
 
-    # Create figure with (n_dims + 2) subplots
-    fig, axes = plt.subplots(n_dims + 2, 1, figsize=(8, 4 * (n_dims + 2)), sharex=True)
+    fig, axes = plt.subplots(total_plots, 1, figsize=(8, 4 * total_plots), sharex=True)
+    axes = np.atleast_1d(axes)
 
-    # Ensure `axes` is always a list (even if there's only one subplot)
-    if not isinstance(axes, np.ndarray):
-        axes = [axes]
+    # Get default Matplotlib color cycle
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
-    # Plot the time series (first n_dims subplots)
+    # Plot each original dimension
     for j in range(n_dims):
-        axes[j].plot(series[:, j], label=f"Dimension {j+1}")
+        axes[j].plot(series[:, j], label=f"Dim {j+1}", color=colors[j % len(colors)])
         axes[j].set_ylabel(f"Dim {j+1}")
         axes[j].legend()
         axes[j].grid()
 
-    # Plot w_t (next subplot)
-    axes[n_dims].plot(w_t, marker="o", linestyle="-", label="w_t values", color="tab:blue")
+    # w_t
+    axes[n_dims].plot(w_t, marker="o", linestyle="-", label="w_t", color=colors[(n_dims + 0) % len(colors)])
     axes[n_dims].set_ylabel("w_t")
     axes[n_dims].legend()
     axes[n_dims].grid()
 
-    # Plot w_t_update (last subplot)
-    axes[n_dims + 1].plot(w_t_update, marker="o", linestyle="-", label="w_t_update values", color="tab:red")
+    # w_t_update
+    axes[n_dims + 1].plot(w_t_update, marker="o", linestyle="-", label="w_t_update", color=colors[(n_dims + 1) % len(colors)])
     axes[n_dims + 1].set_ylabel("w_t_update")
     axes[n_dims + 1].legend()
     axes[n_dims + 1].grid()
 
-    # Add shared x-axis label
-    plt.xlabel("Time Steps")
-    plt.suptitle("Time Series and w_t Plots")
+    # w_t_cont
+    axes[n_dims + 2].plot(wt_cont_list, marker="o", linestyle="-", label="w_t_cont", color=colors[(n_dims + 2) % len(colors)])
+    axes[n_dims + 2].set_ylabel("w_t_cont")
+    axes[n_dims + 2].legend()
+    axes[n_dims + 2].grid()
 
-    # Save the figure
+    # err
+    axes[n_dims + 3].plot(err_list, marker="o", linestyle="-", label="err", color=colors[(n_dims + 3) % len(colors)])
+    axes[n_dims + 3].set_ylabel("err")
+    axes[n_dims + 3].legend()
+    axes[n_dims + 3].grid()
+
+    plt.xlabel("Time Steps")
+    plt.suptitle("Time Series + w_t / Correction / Error")
+
     save_file = os.path.join(save_path, filename)
     plt.savefig(save_file)
-    plt.close(fig)  # Free memory
+    plt.close(fig)
 
     print(f"Plot saved at '{save_file}'.")
